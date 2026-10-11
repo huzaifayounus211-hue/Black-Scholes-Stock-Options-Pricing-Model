@@ -1,7 +1,3 @@
-========================================================================
-PART 1 - IS THE CODE RIGHT?
-========================================================================
-
 Hull's textbook example (S=42, K=40, T=0.5, r=10%, sigma=20%):
   call 4.7594  (Hull: 4.76)    put 0.8086  (Hull: 0.81)
 
@@ -14,10 +10,6 @@ One option, four methods  (S=341.07, K=340.0, T=0.0767y, r=4.22%, sigma=21.0%):
   put   Binomial tree, 2,000 steps        6.8514   error +0.0003 (+0.004%)      11.0 ms
   put   Monte Carlo, 1,000,000 paths      6.8547   error +0.0035 (+0.052%)      28.2 ms  (±0.0158 at 95%)
   put   Crank-Nicolson PDE, 800x800       6.8507   error -0.0004 (-0.006%)      69.0 ms
-
-========================================================================
-PART 2 - IS THE MODEL RIGHT?  AAPL options at the close on 2026-09-25
-========================================================================
 
 Spot 341.07   risk-free rate 4.218% (continuous)
 Historical volatility: 1 month 21.6%   3 months 28.4%   1 year 24.6%  <- used for Model A
@@ -37,5 +29,3 @@ Expiry 2026-12-18  (84 days, 37 liquid out-of-the-money options, dividends befor
   Model B: flat at-the-money vol              $0.588           22.0%              5%
   Implied vol cross-check vs data provider: mean abs difference 0.08 vol points (max 0.27)
   Largest early-exercise premium in this set: $0.253
-
-Charts and results saved to /home/claude/black-scholes-pricer/outputs/
