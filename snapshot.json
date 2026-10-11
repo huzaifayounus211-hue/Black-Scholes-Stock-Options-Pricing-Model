@@ -1,0 +1,27 @@
+{
+  "ticker": "AAPL",
+  "snapshot_date": "2026-09-25",
+  "snapshot_time": "16:00 US Eastern (market close)",
+  "spot": 341.07,
+  "treasury_3m_yield": 0.0424,
+  "treasury_3m_yield_date": "2026-09-24",
+  "dividends": [
+    {
+      "ex_date": "2026-11-09",
+      "amount": 0.27,
+      "estimated": true,
+      "note": "Apple has paid $0.27 a quarter since May 2026 and usually goes ex-dividend in the second week of November; not yet announced"
+    }
+  ],
+  "sources": {
+    "options": "Cboe delayed quotes, end-of-day bid/ask on 25 Sep 2026: https://cdn.cboe.com/api/global/delayed_quotes/options/AAPL.json",
+    "prices": "Cboe historical daily closes: https://cdn.cboe.com/api/global/delayed_quotes/charts/historical/AAPL.json",
+    "treasury_3m_yield": "FRED series DGS3MO: https://fred.stlouisfed.org/series/DGS3MO",
+    "dividends": "https://stockanalysis.com/stocks/aapl/dividend/"
+  },
+  "columns": {
+    "expiry": "YYMMDD; the option expires at the 4pm close on that date",
+    "type": "C = call, P = put",
+    "source_iv": "the data provider's own implied volatility (here Cboe's), used only as an independent cross-check of ours"
+  }
+}
