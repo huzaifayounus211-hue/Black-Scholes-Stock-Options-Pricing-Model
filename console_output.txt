@@ -1,0 +1,41 @@
+========================================================================
+PART 1 - IS THE CODE RIGHT?
+========================================================================
+
+Hull's textbook example (S=42, K=40, T=0.5, r=10%, sigma=20%):
+  call 4.7594  (Hull: 4.76)    put 0.8086  (Hull: 0.81)
+
+One option, four methods  (S=341.07, K=340.0, T=0.0767y, r=4.22%, sigma=21.0%):
+  call  Closed form (Black-Scholes)       9.0194   error +0.0000 (+0.000%)       0.2 ms
+  call  Binomial tree, 2,000 steps        9.0197   error +0.0003 (+0.003%)      11.2 ms
+  call  Monte Carlo, 1,000,000 paths      9.0239   error +0.0045 (+0.050%)      36.0 ms  (±0.0180 at 95%)
+  call  Crank-Nicolson PDE, 800x800       9.0190   error -0.0004 (-0.005%)      74.0 ms
+  put   Closed form (Black-Scholes)       6.8511   error +0.0000 (+0.000%)       0.4 ms
+  put   Binomial tree, 2,000 steps        6.8514   error +0.0003 (+0.004%)      11.0 ms
+  put   Monte Carlo, 1,000,000 paths      6.8547   error +0.0035 (+0.052%)      28.2 ms  (±0.0158 at 95%)
+  put   Crank-Nicolson PDE, 800x800       6.8507   error -0.0004 (-0.006%)      69.0 ms
+
+========================================================================
+PART 2 - IS THE MODEL RIGHT?  AAPL options at the close on 2026-09-25
+========================================================================
+
+Spot 341.07   risk-free rate 4.218% (continuous)
+Historical volatility: 1 month 21.6%   3 months 28.4%   1 year 24.6%  <- used for Model A
+
+Expiry 2026-10-23  (28 days, 23 liquid out-of-the-money options, dividends before expiry $0.00)
+  At-the-money implied vol 20.9%.  Model A uses 24.6%, Model B uses 20.9% for every strike.
+                                      mean abs error  median % error  inside bid-ask
+  Model A: 1-year historical vol              $0.609           54.0%              0%
+  Model B: flat at-the-money vol              $0.267           20.1%             17%
+  Implied vol cross-check vs data provider: mean abs difference 0.13 vol points (max 0.66)
+  Largest early-exercise premium in this set: $0.070
+
+Expiry 2026-12-18  (84 days, 37 liquid out-of-the-money options, dividends before expiry $0.27)
+  At-the-money implied vol 24.3%.  Model A uses 24.6%, Model B uses 24.3% for every strike.
+                                      mean abs error  median % error  inside bid-ask
+  Model A: 1-year historical vol              $0.596           25.7%              5%
+  Model B: flat at-the-money vol              $0.588           22.0%              5%
+  Implied vol cross-check vs data provider: mean abs difference 0.08 vol points (max 0.27)
+  Largest early-exercise premium in this set: $0.253
+
+Charts and results saved to /home/claude/black-scholes-pricer/outputs/
