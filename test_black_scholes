@@ -1,0 +1,181 @@
+"""
+Tests for the Black-Scholes pricer and the three numerical methods.
+
+Run from the project folder with:
+    pytest -v
+"""
+
+import math
+import os
+import sys
+
+# Let the tests import the modules in the project folder
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from black_scholes import EuropeanOption, implied_volatility, put_call_parity_gap  # noqa: E402
+from numerical_methods import (  # noqa: E402
+    binomial_tree_price,
+    crank_nicolson_price,
+    monte_carlo_price,
+)
+
+# A spread of options: (S, K, T, r, sigma, q)
+# in/at/out of the money, short and long dated, low and high vol, with and without dividends
+CASES = [
+    (42, 40, 0.5, 0.10, 0.20, 0.0),
+    (100, 100, 1.0, 0.05, 0.25, 0.0),
+    (100, 80, 0.25, 0.03, 0.40, 0.02),
+    (100, 120, 2.0, 0.04, 0.30, 0.01),
+    (341.07, 340, 28 / 365, 0.0424, 0.21, 0.0),
+    (341.07, 290, 84 / 365, 0.0424, 0.29, 0.003),
+]
+
+
+def close(a, b, tol):
+    return math.isclose(a, b, abs_tol=tol)
+
+
+# ----------------------------------------------------------------------
+# 1. Textbook values
+# ----------------------------------------------------------------------
+def test_hull_textbook_prices():
+    """Hull's worked example: S=42, K=40, T=0.5, r=10%, σ=20% -> c = 4.76, p = 0.81."""
+    call = EuropeanOption(42, 40, 0.5, 0.10, 0.20, "call").price()
+    put = EuropeanOption(42, 40, 0.5, 0.10, 0.20, "put").price()
+    assert round(call, 2) == 4.76
+    assert round(put, 2) == 0.81
+
+
+def test_hull_textbook_greeks():
+    """Hull's Greek-letters example: S=49, K=50, T=20 weeks, r=5%, σ=20%.
+    Hull reports price 2.40, delta 0.522, gamma 0.066, theta -4.31/yr, vega 12.1, rho 8.91."""
+    opt = EuropeanOption(49, 50, 20 / 52, 0.05, 0.20, "call")
+    assert round(opt.price(), 2) == 2.40
+    assert round(opt.delta(), 3) == 0.522
+    assert round(opt.gamma(), 3) == 0.066
+    assert round(opt.theta(), 2) == -4.31
+    assert round(opt.vega(), 1) == 12.1
+    assert round(opt.rho(), 2) == 8.91
+
+
+# ----------------------------------------------------------------------
+# 2. No-arbitrage relationships
+# ----------------------------------------------------------------------
+def test_put_call_parity():
+    for S, K, T, r, sigma, q in CASES:
+        assert abs(put_call_parity_gap(S, K, T, r, sigma, q)) < 1e-10
+
+
+def test_prices_respect_no_arbitrage_bounds():
+    for S, K, T, r, sigma, q in CASES:
+        c = EuropeanOption(S, K, T, r, sigma, "call", q).price()
+        p = EuropeanOption(S, K, T, r, sigma, "put", q).price()
+        fwd_S, pv_K = S * math.exp(-q * T), K * math.exp(-r * T)
+        assert max(0.0, fwd_S - pv_K) <= c <= fwd_S
+        assert max(0.0, pv_K - fwd_S) <= p <= pv_K
+
+
+# ----------------------------------------------------------------------
+# 3. Greeks: analytic formula vs "bump and reprice"
+# ----------------------------------------------------------------------
+def _bumped(opt, **changes):
+    fields = dict(S=opt.S, K=opt.K, T=opt.T, r=opt.r, sigma=opt.sigma, option_type=opt.option_type, q=opt.q)
+    fields.update(changes)
+    return EuropeanOption(**fields).price()
+
+
+def test_greeks_match_finite_differences():
+    for S, K, T, r, sigma, q in CASES:
+        for kind in ("call", "put"):
+            opt = EuropeanOption(S, K, T, r, sigma, kind, q)
+            h = S * 1e-4
+            delta_fd = (_bumped(opt, S=S + h) - _bumped(opt, S=S - h)) / (2 * h)
+            gamma_fd = (_bumped(opt, S=S + h) - 2 * opt.price() + _bumped(opt, S=S - h)) / h**2
+            vega_fd = (_bumped(opt, sigma=sigma + 1e-5) - _bumped(opt, sigma=sigma - 1e-5)) / 2e-5
+            rho_fd = (_bumped(opt, r=r + 1e-5) - _bumped(opt, r=r - 1e-5)) / 2e-5
+            # theta is the change as calendar time passes, i.e. as T shrinks
+            theta_fd = -(_bumped(opt, T=T + 1e-6) - _bumped(opt, T=T - 1e-6)) / 2e-6
+
+            assert close(opt.delta(), delta_fd, 1e-6)
+            assert close(opt.gamma(), gamma_fd, 1e-4)
+            assert close(opt.vega(), vega_fd, 1e-4)
+            assert close(opt.rho(), rho_fd, 1e-4)
+            assert close(opt.theta(), theta_fd, 1e-3)
+
+
+# ----------------------------------------------------------------------
+# 4. Implied volatility
+# ----------------------------------------------------------------------
+def test_implied_vol_recovers_the_input_sigma():
+    for S, K, T, r, sigma, q in CASES:
+        for kind in ("call", "put"):
+            price = EuropeanOption(S, K, T, r, sigma, kind, q).price()
+            if price < 1e-6:
+                continue  # too far out of the money to carry information about sigma
+            iv = implied_volatility(price, S, K, T, r, kind, q)
+            assert close(iv, sigma, 1e-6)
+
+
+def test_implied_vol_deep_out_of_the_money_uses_fallback_safely():
+    # Tiny vega here: Newton struggles, Brent's method should still find it
+    price = EuropeanOption(100, 160, 0.25, 0.03, 0.45, "call").price()
+    assert close(implied_volatility(price, 100, 160, 0.25, 0.03, "call"), 0.45, 1e-5)
+
+
+def test_implied_vol_rejects_impossible_prices():
+    # A call can never be worth more than the stock itself
+    try:
+        implied_volatility(150.0, 100, 100, 1.0, 0.05, "call")
+    except ValueError:
+        return
+    raise AssertionError("expected a ValueError for an arbitrage price")
+
+
+def test_bad_inputs_raise():
+    for bad in (dict(S=-1), dict(K=0), dict(T=0), dict(sigma=0), dict(option_type="straddle")):
+        args = dict(S=100, K=100, T=1, r=0.05, sigma=0.2, option_type="call")
+        args.update(bad)
+        try:
+            EuropeanOption(**args)
+        except ValueError:
+            continue
+        raise AssertionError(f"expected ValueError for {bad}")
+
+
+# ----------------------------------------------------------------------
+# 5. Three independent numerical methods agree with the closed form
+# ----------------------------------------------------------------------
+def test_binomial_tree_converges_to_black_scholes():
+    for S, K, T, r, sigma, q in CASES:
+        for kind in ("call", "put"):
+            bs = EuropeanOption(S, K, T, r, sigma, kind, q).price()
+            tree = binomial_tree_price(S, K, T, r, sigma, kind, q, steps=2000)
+            assert close(tree, bs, max(0.003, 2e-4 * bs))
+
+
+def test_monte_carlo_within_four_standard_errors():
+    for S, K, T, r, sigma, q in CASES:
+        for kind in ("call", "put"):
+            bs = EuropeanOption(S, K, T, r, sigma, kind, q).price()
+            mc, se = monte_carlo_price(S, K, T, r, sigma, kind, q, n_paths=400_000, seed=7)
+            assert abs(mc - bs) < 4 * se + 1e-9
+
+
+def test_crank_nicolson_matches_black_scholes():
+    for S, K, T, r, sigma, q in CASES:
+        for kind in ("call", "put"):
+            bs = EuropeanOption(S, K, T, r, sigma, kind, q).price()
+            pde = crank_nicolson_price(S, K, T, r, sigma, kind, q)
+            assert close(pde, bs, max(0.003, 2e-4 * bs))
+
+
+def test_american_options():
+    # Early exercise can only add value...
+    for S, K, T, r, sigma, q in CASES:
+        euro = binomial_tree_price(S, K, T, r, sigma, "put", q, steps=500)
+        amer = binomial_tree_price(S, K, T, r, sigma, "put", q, steps=500, american=True)
+        assert amer >= euro - 1e-12
+    # ...and an American call on a stock with no dividends is never exercised early
+    euro = binomial_tree_price(100, 100, 1, 0.05, 0.25, "call", 0.0, steps=500)
+    amer = binomial_tree_price(100, 100, 1, 0.05, 0.25, "call", 0.0, steps=500, american=True)
+    assert close(euro, amer, 1e-10)
